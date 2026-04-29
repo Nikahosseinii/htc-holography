@@ -1,0 +1,25 @@
+{
+  "input_mesh": "/mnt/d/object1_2mv.obj",
+  "target_slm": "HoloEye Gaea 2.0 phase-only LCoS SLM",
+  "width_px": 3840,
+  "height_px": 2160,
+  "pixel_pitch_um": 3.74,
+  "wavelength_nm": 515.0,
+  "color_channel": "green",
+  "n_points": 250000,
+  "n_slices": 16,
+  "z_near_mm": 50.0,
+  "z_far_mm": 150.0,
+  "fill_fraction": 0.7,
+  "random_phase": false,
+  "lut_used": "linear 0..255 mapping, not hardware calibrated",
+  "outputs": {
+    "slm_phase_png": "slm_phase_3840x2160.png",
+    "slm_phase_bmp": "slm_phase_3840x2160.bmp",
+    "phase_radians": "phase_radians.npy",
+    "phase_0_2pi": "phase_0_2pi.npy",
+    "reconstructed_intensity": "reconstructed_intensity.png",
+    "summary": "summary.png"
+  },
+  "note": "This is an SLM-format phase-only CGH. Real optical replay still requires the device-specific phase calibration LUT, RGB illumination alignment, and the optical system calibration."
+}
