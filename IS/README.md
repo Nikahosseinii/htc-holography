@@ -2,32 +2,39 @@
 
 This folder contains the script used to reproduce the Inception Score (IS) results reported in Table I.
 
-## Usage
+The script evaluates already-generated image folders. It does not regenerate images, figures, or tables.
 
-From the MVDream environment:
+## Environment
+
+Run from the MVDream environment:
 
     cd ~/MVDream
     source .venv310/bin/activate
 
-Run IS for the baseline/original MVDream outputs:
+## Baseline MVDream IS
+
+Use the full 4000-image baseline validation folder:
 
     python ~/htc-holography/IS/eval_inception_score.py \
       --img_root ~/MVDream/generated_v21_objaverse
 
-Expected baseline result:
+Expected result:
 
     Images scored: 4000
-    Inception Score: mean approximately 9.49, std approximately 0.36
+    Inception Score: mean approximately 9.49
 
-Run IS for the factorized outputs by replacing --img_root with the factorized output folder, for example:
+## Factorized IS
+
+Use the full 4000-image factorized validation folder:
 
     python ~/htc-holography/IS/eval_inception_score.py \
       --img_root ~/MVDream/generated_v21_objaverse_factorized
 
-The Table I factorized result should be close to:
+Expected result:
 
-    Inception Score: mean approximately 4.16, std approximately 0.20
+    Images scored: 4000
+    Inception Score: mean approximately 4.16
 
 ## Notes
 
-The script evaluates generated image folders directly. It does not regenerate images or figures.
+The small folders `outputs_vis_factorized10` and `outputs_vis_factorized25` contain only visualization samples and are not used for the Table I IS evaluation.
