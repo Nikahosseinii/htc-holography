@@ -15,27 +15,6 @@ The main output figure compares each perturbation against the ideal software rep
 - NRMSE vs. ideal replay
 - Pearson correlation vs. ideal replay
 
-## Files
-
-- `slm_pseudo_hardware_stress_test.py`: runs the pseudo-hardware stress test and creates the metrics CSV.
-- `plot_slm_stress_one_figure.py`: creates the final Figure 13 line graph.
-- `slm_stress_metrics.csv`: numerical results.
-- `slm_stress_one_figure.png`: Figure 13 in PNG format.
-- `slm_stress_one_figure.pdf`: Figure 13 in PDF format.
-- `slm_stress_one_figure.svg`: Figure 13 in SVG format.
-- `slm_stress_reconstruction_montage.png`: montage of replay reconstructions.
-
-## Numerical Results
-
-| Case | NRMSE vs. ideal replay | Correlation vs. ideal replay |
-|---|---:|---:|
-| ideal | 0.000000 | 1.000000 |
-| nonuniform illumination | 0.000876 | 0.845862 |
-| wavefront error | 0.000024 | 0.999833 |
-| pixel crosstalk | 0.000132 | 0.994957 |
-| misalignment | 0.001857 | 0.000348 |
-| all uncalibrated | 0.002043 | 0.000465 |
-
 ## Run
 
 From the main project directory:
