@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Environments
+.venv*/
+venv/
+env/
+holo_env/
+.conda/
+
+# Logs
+logs/*.tmp
+*.log
+
+# Large model/data/cache files
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.bin
+.cache/
+huggingface/
+outputs_vis*/
+outputs_latency*/
+outputs_compare*/
+generated*/
+MVDream/
+
+# System
+.DS_Store
+
+# Secrets
+.env
+*.key
+*token*
+*secret*
