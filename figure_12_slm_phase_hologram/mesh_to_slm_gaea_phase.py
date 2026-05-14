@@ -3,27 +3,23 @@
 mesh_to_slm_gaea_phase.py
 
 Convert a reconstructed 3D mesh into an SLM-format phase-only CGH image
-for the same SLM used in the Chlipala et al. Scientific Reports 2025 paper:
-
-Target SLM:
-- HoloEye Gaea 2.0
-- phase-only LCoS SLM
-- resolution: 3840 x 2160
-- pixel pitch: 3.74 um
+for a GAEA-like phase-only LCoS SLM.
 
 This script produces:
-- slm_phase_3840x2160.png  : 8-bit grayscale phase image
-- slm_phase_3840x2160.bmp  : same phase image in BMP format
-- phase_radians.npy        : phase in radians, range [-pi, pi]
-- phase_0_2pi.npy          : phase in radians, range [0, 2pi)
+- slm_phase_3840x2160.png
+- slm_phase_3840x2160.bmp
+- phase_radians.npy
+- phase_0_2pi.npy
 - reconstructed_intensity.png
 - depth_slice_preview.png
+- depth_slice_preview_inverted.png
 - summary.png
+- summary.pdf
 - metadata.json
 
 Important:
-This creates an SLM-format phase map, but a real hardware experiment
-still requires device-specific phase calibration/LUT and optical alignment.
+This creates an SLM-format phase map, but a real hardware experiment still
+requires device-specific phase calibration/LUT and optical alignment.
 """
 
 from __future__ import annotations
@@ -31,7 +27,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 from pathlib import Path
 
 import imageio.v2 as imageio
@@ -64,9 +59,7 @@ def load_mesh(mesh_path: str) -> trimesh.Trimesh:
 
 
 def normalize_mesh_to_unit_box(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """
-    Normalize mesh to fit inside roughly [-0.5, 0.5]^3.
-    """
+    """Normalize mesh to fit inside roughly [-0.5, 0.5]^3."""
     mesh = mesh.copy()
     verts = mesh.vertices.astype(np.float32)
 
@@ -79,7 +72,6 @@ def normalize_mesh_to_unit_box(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
 
     verts = verts / max_extent
     mesh.vertices = verts
-
     return mesh
 
 
@@ -97,14 +89,12 @@ def sample_surface_points_and_colors(mesh: trimesh.Trimesh, n_points: int):
     colors = np.ones((n_points, 3), dtype=np.float32)
 
     try:
-        # Case 1: face colors
         if hasattr(mesh.visual, "face_colors") and mesh.visual.face_colors is not None:
             fc = np.asarray(mesh.visual.face_colors)
             if fc.ndim == 2 and fc.shape[0] >= mesh.faces.shape[0]:
                 c = fc[face_idx, :3].astype(np.float32) / 255.0
                 colors = np.clip(c, 0.0, 1.0)
 
-        # Case 2: vertex colors
         elif hasattr(mesh.visual, "vertex_colors") and mesh.visual.vertex_colors is not None:
             vc = np.asarray(mesh.visual.vertex_colors)
             if vc.ndim == 2 and vc.shape[0] >= mesh.vertices.shape[0]:
@@ -133,6 +123,7 @@ def gaussian_blur_stack(stack: torch.Tensor, kernel_size: int = 5) -> torch.Tens
 
     x = torch.arange(kernel_size, device=device, dtype=dtype) - kernel_size // 2
     sigma = max(kernel_size / 5.0, 1.0)
+
     g = torch.exp(-(x ** 2) / (2 * sigma ** 2))
     g = g / g.sum()
 
@@ -156,11 +147,7 @@ def points_to_depth_slices(
     color_channel: str,
     device: torch.device,
 ):
-    """
-    Rasterize sampled 3D points into amplitude layers.
-
-    The mesh is normalized to fit the SLM aspect ratio while preserving shape.
-    """
+    """Rasterize sampled 3D points into amplitude layers."""
     pts = torch.from_numpy(points_xyz).to(device=device, dtype=torch.float32)
     cols = torch.from_numpy(colors_rgb).to(device=device, dtype=torch.float32)
 
@@ -168,19 +155,13 @@ def points_to_depth_slices(
     y = pts[:, 1]
     z = pts[:, 2]
 
-    # Center again just in case.
     x = x - x.mean()
     y = y - y.mean()
     z = z - z.mean()
 
-    # Fit x/y into SLM canvas.
-    # Mesh coordinates are normalized, then scaled by fill_fraction.
-    aspect = width / height
-
     x_range = (x.max() - x.min()).clamp(min=1e-8)
     y_range = (y.max() - y.min()).clamp(min=1e-8)
 
-    # Determine scale so object fits in both dimensions.
     scale_x = fill_fraction / x_range
     scale_y = fill_fraction / y_range
     scale = torch.minimum(scale_x, scale_y)
@@ -188,11 +169,9 @@ def points_to_depth_slices(
     x_norm = x * scale
     y_norm = y * scale
 
-    # Convert to [0,1].
     x01 = torch.clamp(x_norm + 0.5, 0.0, 1.0)
     y01 = torch.clamp(0.5 - y_norm, 0.0, 1.0)
 
-    # Depth ordering to [0,1].
     z01 = (z - z.min()) / (z.max() - z.min()).clamp(min=1e-8)
     z01 = torch.clamp(z01, 0.0, 1.0)
 
@@ -225,9 +204,7 @@ def points_to_depth_slices(
 
     amplitudes = flat.view(n_slices, height, width)
 
-    max_val = amplitudes.max().clamp(min=1e-8)
-    amplitudes = amplitudes / max_val
-
+    amplitudes = amplitudes / amplitudes.max().clamp(min=1e-8)
     amplitudes = gaussian_blur_stack(amplitudes, kernel_size=5)
     amplitudes = amplitudes / amplitudes.max().clamp(min=1e-8)
 
@@ -244,9 +221,7 @@ def fresnel_propagate(
     pixel_pitch_m: float,
     z_m: float,
 ) -> torch.Tensor:
-    """
-    Fresnel propagation using transfer function approximation.
-    """
+    """Fresnel propagation using transfer function approximation."""
     if z_m <= 0:
         return field
 
@@ -275,9 +250,7 @@ def build_phase_hologram(
     z_far_m: float,
     random_phase: bool,
 ):
-    """
-    Sum propagated fields from depth slices, then extract phase-only hologram.
-    """
+    """Sum propagated fields from depth slices, then extract phase-only hologram."""
     n_slices, h, w = amplitudes.shape
     device = amplitudes.device
 
@@ -327,6 +300,50 @@ def phase_to_uint8(phase_0_2pi: np.ndarray, lut_path: str | None = None) -> np.n
 
 
 # ============================================================
+# Preview helpers
+# ============================================================
+
+def robust_preview_uint8(
+    img: np.ndarray,
+    percentile_low: float = 1.0,
+    percentile_high: float = 99.8,
+    gamma: float = 0.50,
+    invert: bool = False,
+) -> np.ndarray:
+    """
+    Convert an image to an 8-bit preview using robust contrast enhancement.
+
+    This is only for visualization in the paper figure.
+    It does not modify the hologram computation.
+    """
+    img = np.asarray(img, dtype=np.float32)
+    img = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0)
+
+    positive = img[img > 0]
+
+    if positive.size > 10:
+        vmin = np.percentile(positive, percentile_low)
+        vmax = np.percentile(positive, percentile_high)
+    else:
+        vmin = float(img.min())
+        vmax = float(img.max())
+
+    if vmax <= vmin + 1e-12:
+        out = np.zeros_like(img, dtype=np.float32)
+    else:
+        out = (img - vmin) / (vmax - vmin)
+        out = np.clip(out, 0.0, 1.0)
+
+    # gamma < 1 brightens faint structures
+    out = np.power(out, gamma)
+
+    if invert:
+        out = 1.0 - out
+
+    return (255.0 * out).clip(0, 255).astype(np.uint8)
+
+
+# ============================================================
 # Save outputs
 # ============================================================
 
@@ -352,52 +369,87 @@ def save_outputs(
     imageio.imwrite(out / "slm_phase_3840x2160.png", phase_u8)
     imageio.imwrite(out / "slm_phase_3840x2160.bmp", phase_u8)
 
+    # Reconstructed intensity preview
     intensity = np.abs(field_np) ** 2
-    intensity = intensity / (intensity.max() + 1e-8)
-    intensity_u8 = (255.0 * intensity).clip(0, 255).astype(np.uint8)
+    intensity_u8 = robust_preview_uint8(
+        intensity,
+        percentile_low=1.0,
+        percentile_high=99.8,
+        gamma=0.60,
+        invert=False,
+    )
     imageio.imwrite(out / "reconstructed_intensity.png", intensity_u8)
 
+    # Depth-slice preview
     amp_np = amplitudes.detach().cpu().numpy()
     middle = amp_np[amp_np.shape[0] // 2]
-    middle_u8 = (255.0 * middle / (middle.max() + 1e-8)).clip(0, 255).astype(np.uint8)
+
+    middle_u8 = robust_preview_uint8(
+        middle,
+        percentile_low=1.0,
+        percentile_high=99.8,
+        gamma=0.35,
+        invert=False,
+    )
     imageio.imwrite(out / "depth_slice_preview.png", middle_u8)
 
-    # Save a few low-res slice previews.
+    middle_u8_inverted = robust_preview_uint8(
+        middle,
+        percentile_low=1.0,
+        percentile_high=99.8,
+        gamma=0.35,
+        invert=True,
+    )
+    imageio.imwrite(out / "depth_slice_preview_inverted.png", middle_u8_inverted)
+
+    # Save a few enhanced slice previews
     preview_dir = out / "slice_previews"
     preview_dir.mkdir(exist_ok=True)
 
     n_save = min(8, amp_np.shape[0])
     idxs = np.linspace(0, amp_np.shape[0] - 1, n_save).round().astype(int)
 
-    for k, idx in enumerate(idxs):
+    for idx in idxs:
         img = amp_np[idx]
-        img_u8 = (255.0 * img / (img.max() + 1e-8)).clip(0, 255).astype(np.uint8)
+        img_u8 = robust_preview_uint8(
+            img,
+            percentile_low=1.0,
+            percentile_high=99.8,
+            gamma=0.35,
+            invert=False,
+        )
         imageio.imwrite(preview_dir / f"slice_{idx:02d}.png", img_u8)
 
     with open(out / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
-    # Summary figure.
-    plt.figure(figsize=(14, 4))
+    # Summary figure with larger fonts
+    plt.rcParams.update({
+        "font.family": "DejaVu Sans",
+        "font.size": 20,
+        "axes.titlesize": 24,
+        "axes.titleweight": "bold",
+    })
 
-    plt.subplot(1, 3, 1)
-    plt.imshow(middle_u8, cmap="gray")
-    plt.title("Middle depth slice")
-    plt.axis("off")
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
 
-    plt.subplot(1, 3, 2)
-    plt.imshow(intensity_u8, cmap="gray")
-    plt.title("Reconstructed intensity")
-    plt.axis("off")
+    axes[0].imshow(middle_u8, cmap="gray")
+    axes[0].set_title("Middle depth slice", pad=14)
+    axes[0].axis("off")
 
-    plt.subplot(1, 3, 3)
-    plt.imshow(phase_u8, cmap="gray")
-    plt.title("SLM phase map, 8-bit")
-    plt.axis("off")
+    axes[1].imshow(intensity_u8, cmap="gray")
+    axes[1].set_title("Reconstructed intensity", pad=14)
+    axes[1].axis("off")
 
-    plt.tight_layout()
-    plt.savefig(out / "summary.png", dpi=200, bbox_inches="tight")
-    plt.close()
+    axes[2].imshow(phase_u8, cmap="gray")
+    axes[2].set_title("SLM phase map, 8-bit", pad=14)
+    axes[2].axis("off")
+
+    plt.tight_layout(w_pad=2.5)
+
+    plt.savefig(out / "summary.png", dpi=300, bbox_inches="tight", pad_inches=0.08)
+    plt.savefig(out / "summary.pdf", bbox_inches="tight", pad_inches=0.08)
+    plt.close(fig)
 
 
 # ============================================================
@@ -406,62 +458,43 @@ def save_outputs(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert a mesh into a HoloEye Gaea 2.0 SLM-format phase-only CGH."
+        description="Convert a mesh into a GAEA-like SLM-format phase-only CGH."
     )
 
     parser.add_argument("--mesh", type=str, required=True, help="Input mesh path, e.g., .obj/.ply/.glb/.stl")
     parser.add_argument("--out", type=str, required=True, help="Output directory")
-
     parser.add_argument("--width", type=int, default=3840, help="SLM width in pixels")
     parser.add_argument("--height", type=int, default=2160, help="SLM height in pixels")
     parser.add_argument("--pixel_pitch_um", type=float, default=3.74, help="SLM pixel pitch in micrometers")
-
-    parser.add_argument(
-        "--wavelength_nm",
-        type=float,
-        default=515.0,
-        help="Wavelength in nm. For the paper's green LED use 515 nm.",
-    )
-
+    parser.add_argument("--wavelength_nm", type=float, default=515.0, help="Wavelength in nm")
     parser.add_argument("--points", type=int, default=250000, help="Number of mesh surface points to sample")
     parser.add_argument("--slices", type=int, default=16, help="Number of depth slices")
-
     parser.add_argument("--z_near_mm", type=float, default=50.0, help="Nearest propagation distance in mm")
     parser.add_argument("--z_far_mm", type=float, default=150.0, help="Farthest propagation distance in mm")
-
-    parser.add_argument(
-        "--fill_fraction",
-        type=float,
-        default=0.70,
-        help="Fraction of SLM area occupied by the object amplitude support",
-    )
-
+    parser.add_argument("--fill_fraction", type=float, default=0.70, help="Fraction of SLM area occupied by object")
     parser.add_argument(
         "--color_channel",
         choices=["red", "green", "blue", "luma", "white"],
         default="green",
-        help="Amplitude channel used for the hologram. Use green for 515 nm proof-of-concept.",
+        help="Amplitude channel used for the hologram",
     )
-
     parser.add_argument(
         "--random_phase",
         action="store_true",
-        help="Add random phase to each depth slice before propagation. Can reduce artifacts.",
+        help="Add random phase to each depth slice before propagation",
     )
-
     parser.add_argument(
         "--lut",
         type=str,
         default="",
-        help="Optional .npy SLM calibration LUT with shape (256,). Leave empty for linear mapping.",
+        help="Optional .npy SLM calibration LUT with shape (256,)",
     )
-
     parser.add_argument("--device", type=str, default="cuda", help="'cuda' or 'cpu'")
 
     args = parser.parse_args()
 
     if args.width != 3840 or args.height != 2160:
-        print("[WARN] The paper's HoloEye Gaea 2.0 SLM is 3840 x 2160. You changed the size.")
+        print("[WARN] The paper's GAEA-like SLM setting is 3840 x 2160. You changed the size.")
 
     if args.device == "cuda" and torch.cuda.is_available():
         device = torch.device("cuda")
@@ -512,7 +545,7 @@ def main():
 
     metadata = {
         "input_mesh": args.mesh,
-        "target_slm": "HoloEye Gaea 2.0 phase-only LCoS SLM",
+        "target_slm": "GAEA-like phase-only LCoS SLM",
         "width_px": args.width,
         "height_px": args.height,
         "pixel_pitch_um": args.pixel_pitch_um,
@@ -531,12 +564,16 @@ def main():
             "phase_radians": "phase_radians.npy",
             "phase_0_2pi": "phase_0_2pi.npy",
             "reconstructed_intensity": "reconstructed_intensity.png",
+            "depth_slice_preview": "depth_slice_preview.png",
+            "depth_slice_preview_inverted": "depth_slice_preview_inverted.png",
             "summary": "summary.png",
+            "summary_pdf": "summary.pdf",
         },
         "note": (
             "This is an SLM-format phase-only CGH. Real optical replay still requires "
             "the device-specific phase calibration LUT, RGB illumination alignment, "
-            "and the optical system calibration."
+            "and optical-system calibration. The depth-slice preview is contrast-enhanced "
+            "only for visualization and does not change the hologram calculation."
         ),
     }
 
@@ -552,6 +589,9 @@ def main():
     )
 
     print(f"Done. Files saved in: {args.out}")
+    print("Main manuscript figure files:")
+    print(f"  {args.out}/summary.png")
+    print(f"  {args.out}/summary.pdf")
     print("Main SLM-ready files:")
     print(f"  {args.out}/slm_phase_3840x2160.png")
     print(f"  {args.out}/slm_phase_3840x2160.bmp")
