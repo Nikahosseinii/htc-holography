@@ -17,14 +17,14 @@ The script converts a reconstructed 3D mesh into an SLM-ready phase-only hologra
 ## Recreate Figure 12
 
 From the MVDream working directory:
+## Running the enhanced Fig. 12 script
+
+To regenerate the enhanced Fig. 12 SLM-oriented hologram preparation results, run:
 
 ```bash
-cd ~/MVDream
-source .venv310/bin/activate
-
-python /mnt/e/mesh_to_slm_gaea_phase.py \
+python mesh_to_slm_gaea_phase_enhanced_fig12.py \
   --mesh /mnt/d/object1_2mv.obj \
-  --out /mnt/e/holo_output_gaea_green \
+  --out ~/holo_output_gaea_green_enhanced_fig12 \
   --width 3840 \
   --height 2160 \
   --pixel_pitch_um 3.74 \
@@ -36,8 +36,6 @@ python /mnt/e/mesh_to_slm_gaea_phase.py \
   --fill_fraction 0.70 \
   --color_channel green \
   --device cuda
-Expected Outputs
-
 The script saves outputs to:
 
 /mnt/e/holo_output_gaea_green
